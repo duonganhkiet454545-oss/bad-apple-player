@@ -1,0 +1,539 @@
+
+<!DOCTYPE html>
+<html lang="vi">
+
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<title>Bad Apple - Binary Player</title>
+
+<style>
+
+* {
+    box-sizing: border-box;
+}
+
+body {
+    background: #080808;
+    color: white;
+    font-family: monospace;
+    text-align: center;
+    margin: 0;
+    padding: 20px 10px;
+}
+
+h1 {
+    font-size: 28px;
+    letter-spacing: 3px;
+}
+
+.subtitle {
+    color: #888;
+    font-size: 12px;
+}
+
+.container {
+    max-width: 1100px;
+    margin: auto;
+}
+
+.controls {
+    margin: 20px auto;
+}
+
+button, input {
+    margin: 5px;
+}
+
+button {
+    background: #222;
+    color: white;
+    border: 1px solid #555;
+    padding: 10px 18px;
+    cursor: pointer;
+    font-family: monospace;
+}
+
+button:hover {
+    background: #444;
+}
+
+input[type="file"] {
+    color: white;
+    max-width: 100%;
+}
+
+video {
+    display: block;
+    width: 320px;
+    max-width: 90%;
+    margin: 15px auto;
+}
+
+.settings {
+    margin: 15px;
+    color: #aaa;
+}
+
+#binary {
+    display: block;
+    width: fit-content;
+    max-width: 98%;
+    max-height: 65vh;
+    overflow: auto;
+    margin: 20px auto;
+    padding: 12px;
+
+    background: black;
+    color: white;
+
+    border: 1px solid #444;
+
+    font-family: monospace;
+    font-size: 8px;
+    line-height: 1;
+    letter-spacing: 0px;
+
+    text-align: left;
+    white-space: pre;
+}
+
+#status {
+    color: #aaa;
+    font-size: 13px;
+}
+
+#time {
+    color: #aaa;
+    font-size: 12px;
+}
+
+</style>
+</head>
+
+<body>
+
+<div class="container">
+
+<h1>BAD APPLE!!</h1>
+
+<p class="subtitle">
+REAL-TIME BINARY VIDEO PLAYER
+</p>
+
+<!-- VIDEO FILE -->
+
+<div class="controls">
+
+<input
+    type="file"
+    id="file"
+    accept="video/*"
+>
+
+</div>
+
+<!-- VIDEO PLAYER -->
+
+<video id="video" controls playsinline></video>
+
+<!-- BUTTONS -->
+
+<div class="controls">
+
+<button onclick="playVideo()">PLAY</button>
+
+<button onclick="pauseVideo()">PAUSE</button>
+
+<button onclick="restartVideo()">RESTART</button>
+
+</div>
+
+<!-- SETTINGS -->
+
+<div class="settings">
+
+<label>
+FPS:
+
+<select id="fps">
+    <option value="5">5 FPS</option>
+    <option value="10" selected>10 FPS</option>
+    <option value="15">15 FPS</option>
+    <option value="20">20 FPS</option>
+    <option value="30">30 FPS</option>
+</select>
+</label>
+
+<br><br>
+
+<label>
+Speed:
+
+<select id="speed">
+    <option value="0.5">0.5x</option>
+    <option value="0.75">0.75x</option>
+    <option value="1" selected>1x</option>
+    <option value="1.25">1.25x</option>
+    <option value="1.5">1.5x</option>
+    <option value="2">2x</option>
+</select>
+</label>
+
+<br><br>
+
+<label>
+Volume:
+
+<input
+    type="range"
+    id="volume"
+    min="0"
+    max="1"
+    step="0.01"
+    value="1"
+>
+</label>
+
+</div>
+
+<p id="status">WAITING FOR VIDEO...</p>
+
+<p id="time">00:00 / 00:00</p>
+
+<!-- BINARY DISPLAY -->
+
+<pre id="binary">WAITING FOR VIDEO...</pre>
+
+<!-- HIDDEN CANVAS -->
+
+<canvas
+    id="canvas"
+    width="64"
+    height="48"
+    style="display:none">
+</canvas>
+
+</div>
+
+<script>
+
+// ==================================
+// CONFIGURATION
+// ==================================
+
+const WIDTH = 64;
+const HEIGHT = 48;
+
+const video = document.getElementById("video");
+
+const fileInput = document.getElementById("file");
+
+const output = document.getElementById("binary");
+
+const status = document.getElementById("status");
+
+const timeDisplay = document.getElementById("time");
+
+const canvas = document.getElementById("canvas");
+
+const ctx = canvas.getContext("2d", {
+    willReadFrequently: true
+});
+
+let currentURL = null;
+let running = false;
+let animation = null;
+let lastFrame = 0;
+
+// ==================================
+// LOAD VIDEO
+// ==================================
+
+fileInput.addEventListener("change", function() {
+
+    const file = this.files[0];
+
+    if (!file) return;
+
+    pauseVideo();
+
+    if (currentURL) {
+        URL.revokeObjectURL(currentURL);
+    }
+
+    currentURL = URL.createObjectURL(file);
+
+    video.src = currentURL;
+
+    video.load();
+
+    output.textContent = "LOADING...";
+
+    status.textContent = "VIDEO LOADING...";
+
+});
+
+// ==================================
+// CONVERT FRAME TO BINARY
+// ==================================
+
+function convertFrame() {
+
+    if (video.readyState < 2) return;
+
+    ctx.drawImage(
+        video,
+        0,
+        0,
+        WIDTH,
+        HEIGHT
+    );
+
+    const pixels = ctx.getImageData(
+        0,
+        0,
+        WIDTH,
+        HEIGHT
+    ).data;
+
+    let result = "";
+
+    for (let y = 0; y < HEIGHT; y++) {
+
+        for (let x = 0; x < WIDTH; x++) {
+
+            const index =
+                (y * WIDTH + x) * 4;
+
+            const r = pixels[index];
+            const g = pixels[index + 1];
+            const b = pixels[index + 2];
+
+            const brightness =
+                0.299 * r +
+                0.587 * g +
+                0.114 * b;
+
+            result +=
+                brightness > 128 ? "1" : "0";
+
+        }
+
+        result += "\n";
+
+    }
+
+    output.textContent = result;
+
+}
+
+// ==================================
+// TIME DISPLAY
+// ==================================
+
+function formatTime(seconds) {
+
+    if (!Number.isFinite(seconds)) {
+        return "00:00";
+    }
+
+    const min = Math.floor(seconds / 60);
+
+    const sec = Math.floor(seconds % 60);
+
+    return String(min).padStart(2, "0")
+        + ":"
+        + String(sec).padStart(2, "0");
+
+}
+
+function updateTime() {
+
+    timeDisplay.textContent =
+        formatTime(video.currentTime)
+        + " / "
+        + formatTime(video.duration);
+
+}
+
+// ==================================
+// BINARY ANIMATION
+// ==================================
+
+function update(timestamp) {
+
+    if (!running) return;
+
+    const fps = Number(
+        document.getElementById("fps").value
+    );
+
+    const interval = 1000 / fps;
+
+    if (timestamp - lastFrame >= interval) {
+
+        convertFrame();
+
+        lastFrame = timestamp;
+
+        updateTime();
+
+    }
+
+    if (!video.paused && !video.ended) {
+
+        animation =
+            requestAnimationFrame(update);
+
+    } else {
+
+        running = false;
+
+    }
+
+}
+
+// ==================================
+// PLAY
+// ==================================
+
+async function playVideo() {
+
+    if (!video.src) {
+
+        status.textContent =
+            "PLEASE SELECT A VIDEO";
+
+        return;
+
+    }
+
+    try {
+
+        video.playbackRate = Number(
+            document.getElementById("speed").value
+        );
+
+        await video.play();
+
+        running = true;
+
+        lastFrame = 0;
+
+        cancelAnimationFrame(animation);
+
+        status.textContent =
+            "PLAYING BINARY";
+
+        animation =
+            requestAnimationFrame(update);
+
+    } catch (error) {
+
+        status.textContent =
+            "PLAYBACK ERROR";
+
+    }
+
+}
+
+// ==================================
+// PAUSE
+// ==================================
+
+function pauseVideo() {
+
+    running = false;
+
+    cancelAnimationFrame(animation);
+
+    video.pause();
+
+    status.textContent = "PAUSED";
+
+}
+
+// ==================================
+// RESTART
+// ==================================
+
+function restartVideo() {
+
+    if (!video.src) return;
+
+    video.currentTime = 0;
+
+    output.textContent = "RESTARTING...";
+
+    playVideo();
+
+}
+
+// ==================================
+// VOLUME
+// ==================================
+
+document.getElementById("volume")
+.addEventListener("input", function() {
+
+    video.volume = Number(this.value);
+
+});
+
+// ==================================
+// SPEED
+// ==================================
+
+document.getElementById("speed")
+.addEventListener("change", function() {
+
+    video.playbackRate = Number(this.value);
+
+});
+
+// ==================================
+// VIDEO EVENTS
+// ==================================
+
+video.addEventListener("loadedmetadata", function() {
+
+    status.textContent = "VIDEO READY";
+
+    updateTime();
+
+});
+
+video.addEventListener("seeked", function() {
+
+    convertFrame();
+
+    updateTime();
+
+});
+
+video.addEventListener("timeupdate", updateTime);
+
+video.addEventListener("ended", function() {
+
+    running = false;
+
+    cancelAnimationFrame(animation);
+
+    status.textContent = "VIDEO FINISHED";
+
+    updateTime();
+
+});
+
+video.addEventListener("error", function() {
+
+    status.textContent = "VIDEO LOAD ERROR";
+
+});
+
+</script>
+
+</body>
+</html>
